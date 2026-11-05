@@ -1,0 +1,13 @@
+# Arduino / PlatformIO build output
+build/
+.pio/
+*.bin
+*.elf
+*.map
+# OS / editor junk
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+# Never commit your Wi-Fi list (it lives on the SD card)
+wifi.txt
