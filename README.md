@@ -41,6 +41,13 @@ Options are at the top of the sketch (`AUTOPLAY_ON_BOOT`, `LCD_ROTATION`, `VOL_M
 - Copy music in any folders (MP3 / FLAC / WAV).
 - Playlists: `/playlists/*.m3u` (created from the player too).
 - Wi-Fi for radio: create `/wifi.txt` with one `NAME,PASSWORD` per line. Keep this file off GitHub.
+- Radio stations: `/radio.txt`, one station per line:
+  ```
+  # Name, stream URL
+  Radio 1, http://136.243.44.41:8010/stream
+  My Station, http://example.com:8000/stream
+  ```
+  Up to 60 stations. If the file is missing the player creates a sample one on the first boot.
 
 ## Enclosure
 OpenSCAD source and print-ready STLs in [`enclosure/`](enclosure/) — all parts print **without supports** (Bambu Lab P1S, PLA / PETG settings in the spreadsheet). Colourways: orange/white, black/orange, purple/orange.

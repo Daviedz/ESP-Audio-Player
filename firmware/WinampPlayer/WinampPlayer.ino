@@ -69,12 +69,15 @@
 const int MAX_NETS = 8;
 struct Net { char ssid[33]; char pass[65]; };
 Net nets[MAX_NETS]; int netCount = 0, netIdx = 0, netAttempt = 0;
-struct Station { const char *name; const char *url; };
-const Station stations[] = {
+// Radio stations come from /radio.txt on the SD card (one per line:  Name, http://url  - # = comment).
+// The list below is only used when that file is missing or empty; the player creates a sample /radio.txt from it.
+struct DefStation { const char *name; const char *url; };
+const DefStation defStations[] = {
   {"Radio 1", "http://136.243.44.41:8010/stream"},
-  // {"My Station", "http://example.com:8000/stream"},
 };
-const int STATION_N = sizeof(stations) / sizeof(stations[0]);
+#define MAX_STATIONS 60
+struct Station { char name[40]; char url[200]; };
+Station stations[MAX_STATIONS]; int STATION_N = 0;
 
 // ---------------- display / touch settings ----------------
 #define LCD_INVERT    true
@@ -1272,6 +1275,50 @@ void checkButtons() {                                               // external 
   }
 }
 
+void addStation(const char *name, const char *url) {
+  if (STATION_N >= MAX_STATIONS || !url || strlen(url) >= sizeof(stations[0].url)) return;
+  strlcpy(stations[STATION_N].name, name, sizeof(stations[0].name));
+  strlcpy(stations[STATION_N].url, url, sizeof(stations[0].url));
+  STATION_N++;
+}
+void loadStations() {                                              // /radio.txt lines: Name, http://url   (# = comment)
+  STATION_N = 0;
+  File f = SD_MMC.open("/radio.txt");
+  bool hadFile = f;
+  if (f) {
+    while (f.available() && STATION_N < MAX_STATIONS) {
+      String line = f.readStringUntil('\n'); line.trim();
+      if (!line.length() || line[0] == '#') continue;
+      int u = line.indexOf("http://"); if (u < 0) u = line.indexOf("https://");
+      if (u < 0) continue;                                          // no URL on this line
+      String url = line.substring(u), name = line.substring(0, u);
+      url.trim(); name.trim();
+      while (name.length() && (name.endsWith(",") || name.endsWith("|") || name.endsWith(";"))) { name.remove(name.length() - 1); name.trim(); }
+      if (!name.length()) {                                         // no name: use the host name
+        int a = url.indexOf("//") + 2, b = url.indexOf('/', a), c = url.indexOf(':', a);
+        if (c > 0 && (b < 0 || c < b)) b = c;
+        name = url.substring(a, b > 0 ? b : url.length());
+      }
+      addStation(name.c_str(), url.c_str());
+    }
+    f.close();
+  }
+  if (!STATION_N) {                                                  // no file / no stations: built-in list
+    for (auto &d : defStations) addStation(d.name, d.url);
+    if (!hadFile && SD_MMC.cardType() != CARD_NONE) {                // no file yet: write a sample to edit
+      File w = SD_MMC.open("/radio.txt", FILE_WRITE);
+      if (w) {
+        w.println("# Radio stations - one per line:  Name, http://stream-url");
+        w.println("# Lines starting with # are ignored. Max 60 stations.");
+        for (auto &d : defStations) w.printf("%s, %s\n", d.name, d.url);
+        w.close();
+      }
+    }
+  }
+  if (radioIdx >= STATION_N) radioIdx = 0;
+  Serial.printf("%d radio stations\n", STATION_N);
+}
+
 void loadWifi() {                                                  // /wifi.txt lines: NAME,PASSWORD   (# = comment)
   netCount = 0;
   File f = SD_MMC.open("/wifi.txt");
@@ -1553,6 +1600,7 @@ void setup() {
     buildVis();
     if (!visCount && srcType != 0) { srcType = 0; srcId = 0; buildVis(); }
   } else { Serial.println("SD mount failed"); showMsg("NO SD CARD", 0); }
+  loadStations();                                           // /radio.txt (or the built-in list)
 
   audio.setPinout(I2S_BCLK, I2S_LRC, I2S_DOUT, I2S_MCLK);
   audio.setVolume(21);                                      // decoder at full scale; the codec does the volume
