@@ -38,7 +38,7 @@
 #define I2S_DOUT 8
 #define I2S_DIN  6
 #define AUDIO_EN 1
-#define AMP_ON_LEVEL HIGH
+#define AMP_ON_LEVEL LOW
 #define SD_CLK 38
 #define SD_CMD 40
 #define SD_D0  39
@@ -82,8 +82,8 @@ Station stations[MAX_STATIONS]; int STATION_N = 0;
 // ---------------- display / touch settings ----------------
 #define LCD_INVERT    true
 #define TOUCH_SWAP_XY false
-#define TOUCH_FLIP_X  true
-#define TOUCH_FLIP_Y  true
+#define TOUCH_FLIP_X  false
+#define TOUCH_FLIP_Y  false
 // ---- volume curve: 30 steps, each ~1.6 dB, set in the ES8311 codec (no digital boost = no distortion) ----
 #define VOL_STEPS   30
 #define VOL_MIN_DB -46.0f      // loudness of step 1 (quietest audible step)
