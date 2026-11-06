@@ -73,7 +73,7 @@ KX = [75, 90, 105];  KZ = 14;
 KEY_HOLE = 7.4;  CHAMBER = 10;
 
 // ---------------- rear panel -----------------
-USB_X = 72;  SD_X = 108;  PORT_Y = 13;
+USB_X = 72;  SD_X = 108;  PORT_Y = 10;      // PORT_Y was 13: moved down 3 mm to make room for the larger battery
 PAD_T = 1.5;                         // mounting pad on the inside of the back wall (wall = 5 mm locally, extension flange sits on it)
 PORT_RECESS = 3.5;                   // outside recess depth: leaves a 1.5 mm wall so the plug / card reaches the socket
 // USB-C panel-mount extension (sample photo: ear holes 17 mm apart)
@@ -82,7 +82,9 @@ USB_HOLE_SPACING = 17;  USB_HOLE_D = 3.2;  USB_W = 10.0;  USB_H = 3.8;
 SD_W = 19.5;  SD_H = 3.1;     // microSD slot (no screw holes, extension is held by the support shelf)
 
 // ---------------- battery bay (3.7V 2000mAh pouch cell, adjust to your cell) -----------------
-BAT_X = 50;  BAT_Y = 40;  BAT_Z = 10;  BAT_CX = 90;  BAT_CY = 44.5;
+// Cell 55.05 x 67.38 x 9.19 mm INCLUDING its wire; the wire leaves on a short (55.05 mm) edge, so the 67.38 mm length runs along X.
+// BAT_CY keeps ~1.9 mm of room above (top wall) and below (USB-C pad / microSD slot).
+BAT_X = 67.38;  BAT_Y = 55.05;  BAT_Z = 9.19;  BAT_CX = 90;  BAT_CY = 46.5;
 
 // =====================================================================================
 //  helpers

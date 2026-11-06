@@ -5,7 +5,7 @@ Ready-to-print files, already sliced in Bambu Studio. Copy the `.gcode.3mf` file
 
 | # | File | Filament | Layer | Time | Filament | Contents |
 |---|---|---|---|---|---|---|
-| 1 | `1_shell_PLA_orange` | Orange PLA | 0.20 | 3 h 37 min | 114 g | Rear shell (3 mm outer brim) |
+| 1 | `1_shell_PLA_orange` | Orange PLA | 0.20 | 3 h 36 min | 113 g | Rear shell (3 mm outer brim), battery bay for a 55.05 x 67.38 x 9.19 mm cell |
 | 2 | `2_bracket_PLA` | Any PLA | 0.16 | 15 min | 4.5 g | Key switch bracket |
 | 3 | `3_front_plate_PLA_orange` | Orange PLA | 0.20 | 1 h 03 min | 30 g | Front plate |
 | 4 | `4_white_face_plate_PLA_white` | White PLA | 0.20 | 47 min | 16.5 g | White face plate (1.6 mm) |

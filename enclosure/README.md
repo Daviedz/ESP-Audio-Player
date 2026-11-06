@@ -16,6 +16,7 @@ Body 180 x 80 x 40 mm (end ribs +2 mm/side, top rails +3 mm). All earlier measur
 | steel_keys.stl | white | 3 keys | as is |
 
 ## Hardware
+- Battery: 55.05 x 67.38 x 9.19 mm LiPo pouch cell including its wire (wire leaves on a short edge), lying with the 67.38 mm side along X. The USB-C / microSD ports were moved 3 mm down (PORT_Y = 10) to make room.
 - 8 x M3x12 button-head socket screws (ISO 7380, the "round head allen" bolts) + 8 x M3 heat-set inserts. Screws sit on the white plate, none above the screen.
 - 3 tact switches 6x6x5, 2 x M2x8, 2 x 40 mm speakers, 3.7 V 2000 mAh LiPo, 4 rubber feet.
 - USB-C extension: slot 10.0 x 3.8, ear holes 3.2 mm at 17 mm; 2 x M3x6 screws + 2 x M3 nuts (captive hex pockets on the inside pad).
