@@ -54,5 +54,7 @@ OpenSCAD source and print-ready STLs in [`enclosure/`](enclosure/) — all parts
 
 ![Enclosure](enclosure/images/front_3q.png)
 
+**Print-ready for the Bambu Lab P1S (PLA):** sliced `.gcode.3mf` files in [`enclosure/print_P1S/`](enclosure/print_P1S/) - copy to the SD card and print. See [PRINT_GUIDE.md](enclosure/print_P1S/PRINT_GUIDE.md).
+
 ## License
 MIT — see [LICENSE](LICENSE).
