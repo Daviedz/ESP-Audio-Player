@@ -28,6 +28,14 @@
 #include "driver/rtc_io.h"
 #include <Audio.h>
 #include "AudioBoard.h"
+#if defined(ARDUINO_USB_MODE) && ARDUINO_USB_MODE == 0     // Tools > USB Mode = "USB-OTG (TinyUSB)" -> USB drive mode available
+#include "USB.h"
+#include "USBMSC.h"
+#include "diskio.h"      // multi-sector SD access (much faster than one sector at a time)
+#define HAVE_USB_MSC 1
+#else
+#define HAVE_USB_MSC 0
+#endif
 
 // ---------------- pins ----------------
 #define I2C_SDA 16
@@ -200,7 +208,7 @@ int batMv = 0, batPct = 0; bool charging = false;      // battery state
 uint32_t repT = 0; bool repFirst = false;                 // volume +/- auto-repeat
 bool radioMode = false; int radioIdx = 0; uint8_t radioSt = 0;   // 0 off, 1 wifi connecting, 3 streaming
 uint32_t radioT = 0, radioStartMs = 0; int radioTries = 0; volatile bool radioLost = false;
-void stopRadio(); void startRadio(int k);
+void stopRadio(); void startRadio(int k); void enterUsbDrive();
 int popId = -1;                                 // song shown in the "add to playlist" popup
 
 // ---------------- layout ----------------
@@ -1068,12 +1076,13 @@ void drawPwrView() {
   fb.setFont(&fonts::Font4); fb.setTextSize(1); fb.setTextColor(C_TXT);
   fb.setCursor(78, 44); fb.print("POWER OFF?");
   label2(37, 80, "Press the BOOT button to turn it on again", C_LIGHT);
-  sbutton(36, 110, 120, 70, false);
-  led(62, 142, C(0xF0,0x40,0x40));
-  fb.setFont(&fonts::Font4); fb.setTextColor(C(0xB0,0x20,0x20)); fb.setCursor(74, 132); fb.print("OFF");
-  sbutton(164, 110, 120, 70, false);
-  fb.setTextColor(C_ICON); fb.setCursor(176, 132); fb.print("CANCEL");
-  label(48, 205, "(or hold the BOOT button for 1.5 seconds anytime)", C_LIGHT);
+  sbutton(36, 104, 120, 54, false);
+  led(62, 128, C(0xF0,0x40,0x40));
+  fb.setFont(&fonts::Font4); fb.setTextColor(C(0xB0,0x20,0x20)); fb.setCursor(74, 120); fb.print("OFF");
+  sbutton(164, 104, 120, 54, false);
+  fb.setTextColor(C_ICON); fb.setCursor(176, 120); fb.print("CANCEL");
+  sbtn(36, 166, 248, 30, "USB DRIVE (ADD SONGS FROM PC)", true, C(0x40,0xC0,0xF0), false, true);
+  label(48, 212, "(or hold the BOOT button for 1.5 seconds anytime)", C_LIGHT);
 }
 
 void drawUI() {
@@ -1468,8 +1477,9 @@ void onPress(int x, int y) {
       pressY = y; pressTop = lvTop; pressT = millis(); pressRow = (y - PL_Y0) / PL_ROW_H;
     }
   } else if (view == V_PWR) {
-    if (inRect(x, y, 36, 110, 120, 70)) powerOff("");
-    else if (inRect(x, y, 164, 110, 120, 70)) view = V_MAIN;
+    if (inRect(x, y, 36, 104, 120, 54)) powerOff("");
+    else if (inRect(x, y, 164, 104, 120, 54)) view = V_MAIN;
+    else if (inRect(x, y, 36, 166, 248, 30)) enterUsbDrive();
   } else if (view == V_ADD) {
     if (inRect(x, y, 256, 214, 56, 22)) closeAdd();
     else if (y >= ADD_Y0 && y < ADD_Y0 + (plCount + 1) * ADD_ROW) {
@@ -1545,6 +1555,95 @@ void handleTouch() {
   wasDown = down;
 }
 
+// ---------------- USB drive mode (SD card appears as a drive on the PC) ----------------
+// PWR menu > USB DRIVE reboots into this mode: no playback, the SD card is exported over the native USB port.
+// Eject the drive on the PC, then touch EXIT (or press BOOT) to reboot back into the player (the song list rescans itself).
+#if HAVE_USB_MSC
+USBMSC usbMsc;
+#define USB_WRITABLE 1           // 1 = PC can copy songs onto the card, 0 = read-only
+RTC_NOINIT_ATTR volatile uint32_t usbRd, usbWr, usbFail, usbLastLba, usbStage;   // survive a crash so the next boot can show them
+static uint8_t usbPdrv = 0xFF;                       // FATFS drive number of the SD card (0xFF = unknown -> slow single-sector path)
+static int32_t usbRead(uint32_t lba, uint32_t offset, void *buf, uint32_t size) {
+  uint8_t *b = (uint8_t *)buf; uint32_t n = size / 512; usbRd++; usbLastLba = lba; usbStage = 1;
+  if (usbPdrv != 0xFF) { if (disk_read(usbPdrv, b, lba, n) == 0) return (int32_t)size; usbFail++; return -1; }
+  for (uint32_t i = 0; i < n; i++) if (!SD_MMC.readRAW(b + i * 512, lba + i)) { usbFail++; return -1; }
+  return (int32_t)size;
+}
+static int32_t usbWrite(uint32_t lba, uint32_t offset, uint8_t *buf, uint32_t size) {
+  uint32_t n = size / 512; usbWr++; usbLastLba = lba; usbStage = 2;
+  if (usbPdrv != 0xFF) { if (disk_write(usbPdrv, buf, lba, n) == 0) return (int32_t)size; usbFail++; return -1; }
+  for (uint32_t i = 0; i < n; i++) if (!SD_MMC.writeRAW(buf + i * 512, lba + i)) { usbFail++; return -1; }
+  return (int32_t)size;
+}
+#endif
+
+void enterUsbDrive() {
+#if HAVE_USB_MSC
+  LOCK(); audio.stopSong(); UNLOCK();
+  if (state != ST_STOP) saveLastSong(curSec());
+  stopRadio();
+  prefs.putBool("usbm", true);                                    // next boot = USB drive mode
+  fb.fillScreen(C_BODY); titleBar("USB DRIVE");
+  label2(60, 110, "STARTING...", C_LIGHT);
+  fb.pushSprite(0, 0);
+  delay(300);
+  ESP.restart();
+#else
+  showMsg("SET TOOLS > USB MODE TO", 0);                          // sketch was built without TinyUSB
+  delay(2500);
+#endif
+}
+
+void usbDriveMode() {
+#if HAVE_USB_MSC
+  prefs.putString("dbg", "USB: sd mount");
+  SD_MMC.setPins(SD_CLK, SD_CMD, SD_D0, SD_D1, SD_D2, SD_D3);
+  bool ok = SD_MMC.begin("/sdcard", false, false, 40000, 20) && SD_MMC.cardSize() > 0;
+  uint32_t blocks = (uint32_t)(SD_MMC.cardSize() / 512);
+  usbRd = usbWr = usbFail = usbLastLba = usbStage = 0;
+  if (ok) {                                                        // find the SD drive number and check it reads the same data
+    static uint8_t a[512] __attribute__((aligned(4))), c[512] __attribute__((aligned(4)));
+    for (uint8_t d = 0; d < 4; d++) {
+      if (!SD_MMC.readRAW(a, 0) || disk_read(d, c, 0, 1) != 0) continue;
+      if (!memcmp(a, c, 512)) { usbPdrv = d; break; }
+    }
+  }
+  Serial.printf("SD ok=%d blocks=%u\n", ok, (unsigned)blocks);
+  if (ok) {
+    prefs.putString("dbg", "USB: msc begin");
+    usbMsc.vendorID("ESPAMP"); usbMsc.productID("SD Card"); usbMsc.productRevision("1.0");
+    usbMsc.onRead(usbRead); usbMsc.onWrite(usbWrite);
+    usbMsc.isWritable(USB_WRITABLE);
+    usbMsc.mediaPresent(true);
+    usbMsc.begin(blocks, 512);
+    prefs.putString("dbg", "USB: usb begin");
+    USB.begin();
+    prefs.putString("dbg", "USB: running");
+  }
+  digitalWrite(AUDIO_EN, AMP_ON_LEVEL == HIGH ? LOW : HIGH);      // speaker off
+  uint32_t t0 = millis(); bool wasDown = false;
+  while (true) {
+    fb.fillScreen(C_BODY); titleBar("USB DRIVE");
+    fb.setFont(&fonts::Font4); fb.setTextSize(1); fb.setTextColor(ok ? C_TXT : C(0xF0,0x60,0x60));
+    fb.setCursor(40, 60); fb.print(ok ? "SD CARD CONNECTED" : "NO SD CARD");
+    label2(30, 100, ok ? "Plug the USB-C cable into the PC and copy" : "Insert a card and restart", C_LIGHT);
+    if (ok) { label2(30, 118, "your songs. Eject the drive on the PC", C_LIGHT); label2(30, 136, "before you press EXIT.", C_LIGHT); }
+    { char st[64]; snprintf(st, sizeof(st), "rd %u wr %u fail %u lba %u", (unsigned)usbRd, (unsigned)usbWr, (unsigned)usbFail, (unsigned)usbLastLba); label(30, 152, st, C_LIGHT); }
+    sbtn(80, 170, 160, 44, "EXIT", true, C(0x40,0xC0,0xF0), false, true);
+    fb.pushSprite(0, 0);
+    for (int i = 0; i < 10; i++) {                                // ~0.5 s, poll touch + BOOT
+      int x, y; bool d = readTouch(x, y);
+      if ((d && !wasDown && inRect(x, y, 80, 170, 160, 44)) || (digitalRead(POWER_BTN) == LOW && millis() - t0 > 1500)) {
+        prefs.remove("dbg");
+        delay(200);
+        ESP.restart();
+      }
+      wasDown = d; delay(50);
+    }
+  }
+#endif
+}
+
 // ---------------- setup / loop ----------------
 void setup() {
   Serial.begin(115200);
@@ -1578,6 +1677,11 @@ void setup() {
   applyVolume();                                            // volume lives in the codec (see VOL_MIN_DB / VOL_MAX_DB)
   pinMode(AUDIO_EN, OUTPUT); applyOutput();                         // speaker / BT / both, as last used
 
+  if (prefs.getBool("usbm", false)) {                       // requested from the PWR menu: act as a USB drive
+    prefs.putBool("usbm", false);                           // one-shot: if drive mode ever crashes, the next boot is normal
+    if (HAVE_USB_MSC) { finishBootAnim(); usbDriveMode(); }   // boot animation must stop first (it shares the display bus)                       // never returns (EXIT reboots)
+  }
+
   tr      = (Track *)ps_malloc((size_t)MAX_TRACKS * sizeof(Track));
   vis     = (uint16_t *)ps_malloc(MAX_TRACKS * sizeof(uint16_t));
   rankArr = (uint16_t *)ps_malloc(MAX_TRACKS * sizeof(uint16_t));
@@ -1608,6 +1712,8 @@ void setup() {
   applyEQ();
   finishBootAnim();                                         // let the boot animation finish its outro
   xTaskCreatePinnedToCore(audioTask, "audio", 8192, NULL, 3, NULL, 1);
+  { String d = prefs.getString("dbg", "");                    // drive mode ended without EXIT: show where / why
+    if (d.length()) { char m[80]; snprintf(m, sizeof(m), "%s RST%d r%u w%u f%u s%u", d.c_str(), (int)esp_reset_reason(), (unsigned)usbRd, (unsigned)usbWr, (unsigned)usbFail, (unsigned)usbStage); showMsg(m, (int)usbLastLba); delay(9000); prefs.remove("dbg"); } }
   if (visCount) {
     String lp = prefs.getString("lastP", "");
     int last = lp.length() ? findPath(lp.c_str()) : -1;                // the song playing at power-off
