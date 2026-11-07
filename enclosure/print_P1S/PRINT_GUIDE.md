@@ -1,7 +1,7 @@
 # Print guide - Bambu Lab P1S, 0.4 mm nozzle, PLA only
 
 Ready-to-print files, already sliced in Bambu Studio. Copy the `.gcode.3mf` files to the printer's SD card
-(any folder), then choose a file on the printer screen and start it. No slicer needed. One filament per plate, no AMS needed.
+(any folder), then choose a file on the printer screen and start it. No slicer needed. One filament per plate. Works with or without an AMS (see below).
 
 | # | File | Filament | Layer | Time | Filament | Contents |
 |---|---|---|---|---|---|---|
@@ -14,6 +14,22 @@ Ready-to-print files, already sliced in Bambu Studio. Copy the `.gcode.3mf` file
 
 Total about 6 h 10 min and 170 g. Print order: 1 (shell, checks the ports) -> 3 -> 4 -> 5 -> 6 -> 2.
 Colours follow the orange/white colourway; for black/orange or purple/orange just load those filaments instead.
+
+## AMS (Bambu Lab AMS)
+Each file uses one filament and carries its colour (orange `#FF8040` or white `#FFFFFF`), so the printer usually pre-selects the matching spool. It is not locked to a slot, so check the mapping screen before you start and pick the right slot.
+
+Example AMS order White / Green / Orange (slots 1 / 2 / 3):
+
+| File | AMS slot |
+|---|---|
+| 1 shell | 3 (Orange) |
+| 2 bracket | any, e.g. 1 (White) |
+| 3 front plate | 3 (Orange) |
+| 4 white face plate | 1 (White) |
+| 5 trim | 3 (Orange) |
+| 6 small parts | 1 (White) |
+
+If your orange spool is a very different shade, colour matching may not pick it; choose the slot by hand.
 
 ## Settings used (from `P1S_PLA_PETG_print_settings.xlsx`, PLA column)
 - Printer: Bambu Lab P1S 0.4 nozzle. Build plate: Textured PEI (or Cool Plate). Door open or top lid off (PLA heat creep).
