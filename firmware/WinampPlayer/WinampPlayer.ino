@@ -294,12 +294,30 @@ void sbtn(int x, int y, int w, int h, const char *t, bool hasLed = false, uint16
   fb.setCursor(tx, ty); fb.print(t);
 }
 
+// green -> yellow -> orange colour for position t (0..1) along a bar
+uint16_t gradCol(float t) {
+  t = constrain(t, 0.0f, 1.0f);
+  int r, g, b;
+  if (t < 0.5f) { float u = t * 2; r = (int)(0x00 + (0xF0 - 0x00) * u); g = (int)(0xE0 + (0xE0 - 0xE0) * u); b = (int)(0x30 * (1 - u)); }
+  else          { float u = (t - 0.5f) * 2; r = 0xF0; g = (int)(0xE0 + (0x80 - 0xE0) * u); b = (int)(0x10 * u); }
+  return C(r, g, b);
+}
+
 // retro slider: dark groove, optional coloured fill, silver knob with grip lines
-void rslider(int x, int y, int w, int h, float frac, int kw, uint16_t fill, bool centreMark = false) {
+// fillMode: 0 = solid `fill` from the left, 1 = green->yellow->orange gradient from the left,
+//           2 = balance: green over the whole groove when centred, red from the centre to the knob otherwise
+void rslider(int x, int y, int w, int h, float frac, int kw, uint16_t fill, bool centreMark = false, int fillMode = 0) {
   fb.fillRect(x, y, w, h, C_GROOVE);
   fb.drawFastHLine(x, y, w, C_DARK); fb.drawFastHLine(x, y + h - 1, w, C(0x3A,0x3C,0x58));
   int tx = x + (int)(frac * (w - kw));
-  if (fill) fb.fillRect(x + 1, y + 2, max(0, tx - x + kw / 2 - 1), h - 4, fill);
+  if (fillMode == 1) {
+    int fw = max(0, tx - x + kw / 2 - 1);
+    for (int i = 0; i < fw; i++) fb.drawFastVLine(x + 1 + i, y + 2, h - 4, gradCol((float)i / max(1, w - 2)));
+  } else if (fillMode == 2) {
+    int cx = x + w / 2, kc = tx + kw / 2;
+    if (abs(kc - cx) <= 1) fb.fillRect(x + 1, y + 2, w - 2, h - 4, C(0x00,0xC0,0x20));
+    else fb.fillRect(min(cx, kc), y + 2, abs(kc - cx), h - 4, C(0xE0,0x20,0x20));
+  } else if (fill) fb.fillRect(x + 1, y + 2, max(0, tx - x + kw / 2 - 1), h - 4, fill);
   if (centreMark) fb.drawFastVLine(x + w / 2, y + 1, h - 2, C(0x50,0x52,0x70));
   int ky = y - 4, kh = h + 8;
   sbutton(tx, ky, kw, kh, false);
@@ -943,13 +961,16 @@ void drawMain() {
   label(4, VOL_Y + 1, "VOL", C_TXT);
   rslider(VOL_X, VOL_Y, VOL_W, VOL_H, volume / (float)VOL_STEPS, VOL_KW, C_VOLFILL);
   label(BAL_X - 22, VOL_Y + 1, "BAL", C_TXT);
-  rslider(BAL_X, VOL_Y, BAL_W, VOL_H, (balance + 16) / 32.0f, VOL_KW, 0, true);
+  rslider(BAL_X, VOL_Y, BAL_W, VOL_H, (balance + 16) / 32.0f, VOL_KW, 0, true, 2);
 
   // ---- seek ----
-  if (radioMode) { fb.fillRect(SEEK_X, SEEK_Y, SEEK_W, 10, C_GROOVE); label(SEEK_X + 126, SEEK_Y + 1, "LIVE RADIO", C_GRN); }
-  else {
+  if (radioMode) {
+    // live radio has no length: sweep 0 -> 100 % over 60 min, then jump back to the left
+    float frac = (radioSt == 3) ? (float)((millis() - radioStartMs) % 3600000UL) / 3600000.0f : 0;
+    rslider(SEEK_X, SEEK_Y, SEEK_W, 10, frac, SEEK_KW, 0, false, 1);
+  } else {
     float frac = (grab == 2) ? seekFrac : (dur ? (float)cur / dur : 0);
-    rslider(SEEK_X, SEEK_Y, SEEK_W, 10, constrain(frac, 0.0f, 1.0f), SEEK_KW, C_SEEKFILL);
+    rslider(SEEK_X, SEEK_Y, SEEK_W, 10, constrain(frac, 0.0f, 1.0f), SEEK_KW, 0, false, 1);
   }
   drawTransport();
 }
@@ -1712,8 +1733,10 @@ void setup() {
   applyEQ();
   finishBootAnim();                                         // let the boot animation finish its outro
   xTaskCreatePinnedToCore(audioTask, "audio", 8192, NULL, 3, NULL, 1);
+#if HAVE_USB_MSC
   { String d = prefs.getString("dbg", "");                    // drive mode ended without EXIT: show where / why
     if (d.length()) { char m[80]; snprintf(m, sizeof(m), "%s RST%d r%u w%u f%u s%u", d.c_str(), (int)esp_reset_reason(), (unsigned)usbRd, (unsigned)usbWr, (unsigned)usbFail, (unsigned)usbStage); showMsg(m, (int)usbLastLba); delay(9000); prefs.remove("dbg"); } }
+#endif
   if (visCount) {
     String lp = prefs.getString("lastP", "");
     int last = lp.length() ? findPath(lp.c_str()) : -1;                // the song playing at power-off
