@@ -99,6 +99,9 @@ Station stations[MAX_STATIONS]; int STATION_N = 0;
 #define AUTOPLAY_ON_BOOT 0   // 1 = start playing the first song at power-up, 0 = wait for PLAY
 #define LCD_ROTATION  1        // 1 = USB-C on the right, 3 = USB-C on the left
 #define BOOT_ANIM     1        // 1 = animated boot screen (spinning record + spectrum), 0 = plain text
+#define CLOCK_24H     0        // live radio shows the local time (from the internet): 1 = 24 h, 0 = 12 h
+#define TZ_DEFAULT    "UTC-8"  // POSIX time zone, e.g. "CET-1CEST,M3.5.0,M10.5.0/3" (Europe), "EST5EDT,M3.2.0,M11.1.0" (US East),
+                               // "PST8PDT,M3.2.0,M11.1.0" (US West). Can also be set with a one-line /timezone.txt on the SD card.
 
 class LGFX : public lgfx::LGFX_Device {
   lgfx::Panel_ILI9341 _panel;
@@ -327,7 +330,7 @@ void rslider(int x, int y, int w, int h, float frac, int kw, uint16_t fill, bool
 void seg7(int x, int y, int d, int w, int h, int t) {
   static const uint8_t m[10] = {0x3F,0x06,0x5B,0x4F,0x66,0x6D,0x7D,0x07,0x7F,0x6F};
   const int hh = h / 2;
-  uint8_t s = m[d % 10];
+  uint8_t s = d < 0 ? 0x40 : m[d % 10];                  // d < 0 = dash (clock not synced yet)
   auto seg = [&](int bit, int sx, int sy, int sw, int sh) { fb.fillRect(sx, sy, sw, sh, (s >> bit) & 1 ? C_GRN : C_DGRN); };
   seg(0, x + t, y,           w - 2 * t, t);
   seg(1, x + w - t, y + t,   t, hh - t);
@@ -905,10 +908,17 @@ void drawMain() {
   if (grab == 2 && dur) cur = (uint32_t)(seekFrac * dur);
   if (radioMode) cur = (radioSt == 3) ? (millis() - radioStartMs) / 1000 : 0;
   int mm = (cur / 60) % 100, ss = cur % 60;
+  int pm = -1;                                                         // -1 = no AM/PM marker, 0 = AM, 1 = PM
+  if (radioMode) {                                                     // live radio: show the local clock HH:MM instead of a timer
+    struct tm t; bool ok = radioSt == 3 && getLocalTime(&t, 0) && t.tm_year > 120;
+    int h = ok ? t.tm_hour : 0; if (ok && !CLOCK_24H) { pm = h >= 12; h %= 12; if (!h) h = 12; }
+    mm = ok ? h : -1; ss = ok ? t.tm_min : -1;
+  }
   if (!(state == ST_PAUSE && (millis() / 500) % 2)) {                  // blinks while paused
-    seg7(22, 24, mm / 10, 18, 30, 3); seg7(44, 24, mm % 10, 18, 30, 3);
+    seg7(22, 24, mm < 0 ? -1 : mm / 10, 18, 30, 3); seg7(44, 24, mm < 0 ? -1 : mm % 10, 18, 30, 3);
     fb.fillRect(66, 32, 3, 3, C_GRN); fb.fillRect(66, 44, 3, 3, C_GRN);
-    seg7(73, 24, ss / 10, 18, 30, 3); seg7(95, 24, ss % 10, 18, 30, 3);
+    seg7(73, 24, ss < 0 ? -1 : ss / 10, 18, 30, 3); seg7(95, 24, ss < 0 ? -1 : ss % 10, 18, 30, 3);
+    if (pm >= 0) { label(118, 28, "AM", pm == 0 ? C_GRN : C_DGRN); label(118, 44, "PM", pm == 1 ? C_GRN : C_DGRN); }
   }
   drawAnalyzer(vu);
 
@@ -1382,7 +1392,15 @@ void beginNet() {
   radioSt = 1; radioT = millis();
 }
 
+String tzStr = TZ_DEFAULT;
+void loadTimezone() {                                              // optional /timezone.txt: one POSIX TZ string
+  File f = SD_MMC.open("/timezone.txt");
+  if (!f) return;
+  String l = f.readStringUntil('\n'); l.trim(); f.close();
+  if (l.length() && l.length() < 64) tzStr = l;
+}
 void connectStream() {
+  configTzTime(tzStr.c_str(), "pool.ntp.org", "time.google.com");   // (re)start NTP; Wi-Fi is up here
   titleText = String(stations[radioIdx].name) + " ...";
   LOCK(); bool ok = audio.connecttohost(stations[radioIdx].url); UNLOCK();
   radioSt = 3; radioT = millis(); radioLost = !ok;
@@ -1725,7 +1743,8 @@ void setup() {
     buildVis();
     if (!visCount && srcType != 0) { srcType = 0; srcId = 0; buildVis(); }
   } else { Serial.println("SD mount failed"); showMsg("NO SD CARD", 0); }
-  loadStations();                                           // /radio.txt (or the built-in list)
+  loadTimezone();
+  loadStations();                                       // /radio.txt (or the built-in list)
 
   audio.setPinout(I2S_BCLK, I2S_LRC, I2S_DOUT, I2S_MCLK);
   audio.setVolume(21);                                      // decoder at full scale; the codec does the volume

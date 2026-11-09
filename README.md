@@ -46,6 +46,7 @@ Options are at the top of the sketch (`AUTOPLAY_ON_BOOT`, `LCD_ROTATION`, `VOL_M
 - Copy music in any folders (MP3 / FLAC / WAV).
 - Playlists: `/playlists/*.m3u` (created from the player too).
 - Wi-Fi for radio: create `/wifi.txt` with one `NAME,PASSWORD` per line. Keep this file off GitHub.
+- Live radio shows the local time (HH:MM, fetched over NTP) instead of a timer. Set your time zone with `TZ_DEFAULT` in the sketch or a one-line `/timezone.txt` (POSIX TZ string, e.g. `CET-1CEST,M3.5.0,M10.5.0/3`). Default is UTC+8. Shows `--:--` until the time is synced.
 - Radio stations: `/radio.txt`, one station per line:
   ```
   # Name, stream URL
